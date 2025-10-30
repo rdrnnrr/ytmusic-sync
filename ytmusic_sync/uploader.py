@@ -64,7 +64,7 @@ class YouTubeMusicUploader:
             except Exception as exc:  # noqa: BLE001 broad except to log errors
                 logger.exception("Failed to upload %s: %s", media.path, exc)
                 continue
-            if video_id:
+            if video_id and not self.dry_run:
                 self.tracker.mark_uploaded(media.path, video_id)
 
     def upload_file(self, file_path: Path | str) -> Optional[str]:
