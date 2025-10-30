@@ -55,17 +55,27 @@ The uploader uses [`ytmusicapi`](https://ytmusicapi.readthedocs.io) which requir
 
 1. Follow the [official setup guide](https://ytmusicapi.readthedocs.io/en/latest/setup.html) to export your YouTube Music headers.
 2. Place the resulting `headers_auth.json` file somewhere safe, e.g. `~/.config/ytmusicapi/headers_auth.json`.
-3. Pass the path to the CLI with `--headers` or update the GUI configuration in `ytmusic_sync/gui.py` to use your custom location.
+3. Launch the GUI and click **Load Headers** to point at the file or run the CLI once with `--headers`. The location is saved to
+   `~/.ytmusic-sync/config.json` and re-used automatically next time.
+4. The app validates the headers immediately and will surface a clear error dialog or CLI message if authentication fails.
 
 ### 4. Run the command line interface
 
 ```bash
+# First run – set headers and store them in the shared config file
 ytmsync /path/to/your/music \
   --headers ~/.config/ytmusicapi/headers_auth.json \
   --tracker ~/.ytmusic-sync/uploads.json
+
+# Subsequent runs can omit --headers thanks to the persisted configuration
+ytmsync /path/to/your/music
 ```
 
-Add `--dry-run` to simulate uploads without contacting YouTube Music.
+Additional flags:
+
+- `--config` – use an alternate configuration file instead of `~/.ytmusic-sync/config.json`.
+- `--clear-headers` – remove the stored headers path.
+- `--dry-run` – simulate uploads without contacting YouTube Music.
 
 ### 5. Launch the desktop app
 
@@ -83,6 +93,8 @@ The GUI now provides:
 - **Activity Log & Progress** – monitor individual file status and an overall progress bar.
 
 > **Tip:** The default dry-run mode is perfect for validating your setup. Disable it only after verifying that authentication headers are configured.
+
+The desktop app remembers the headers file you select and will warn immediately if authentication fails so issues can be resolved before starting a large upload.
 
 ### 6. Build a Windows executable (optional)
 

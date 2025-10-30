@@ -17,6 +17,10 @@ from .tracker import UploadTracker
 logger = logging.getLogger(__name__)
 
 
+class AuthenticationError(RuntimeError):
+    """Raised when authentication with YouTube Music fails."""
+
+
 def _load_client(headers_path: Path | str | None) -> YTMusic:
     if YTMusic is None:  # pragma: no cover - straightforward guard
         raise RuntimeError(
@@ -25,13 +29,21 @@ def _load_client(headers_path: Path | str | None) -> YTMusic:
     if headers_path:
         headers_path = Path(headers_path).expanduser()
         if not headers_path.exists():
-            raise FileNotFoundError(
+            raise AuthenticationError(
                 "headers_auth.json file not found. Generate it by following the ytmusicapi documentation."
             )
+        if headers_path.is_dir():
+            raise AuthenticationError(f"Expected a headers_auth.json file but received directory: {headers_path}")
         logger.info("Authenticating with headers from %s", headers_path)
-        return YTMusic(headers_path)
+        try:
+            return YTMusic(headers_path)
+        except Exception as exc:  # pragma: no cover - ytmusicapi failure at runtime
+            raise AuthenticationError(f"Failed to authenticate with headers at {headers_path}: {exc}") from exc
     logger.info("Using default OAuth flow for YTMusic. Provide headers for better stability.")
-    return YTMusic()
+    try:
+        return YTMusic()
+    except Exception as exc:  # pragma: no cover - ytmusicapi failure at runtime
+        raise AuthenticationError(f"Failed to authenticate with the default OAuth flow: {exc}") from exc
 
 
 class YouTubeMusicUploader:
@@ -61,6 +73,8 @@ class YouTubeMusicUploader:
                 continue
             try:
                 video_id = self.upload_file(media.path)
+            except AuthenticationError:
+                raise
             except Exception as exc:  # noqa: BLE001 broad except to log errors
                 logger.exception("Failed to upload %s: %s", media.path, exc)
                 continue
@@ -82,4 +96,4 @@ class YouTubeMusicUploader:
         return video_id
 
 
-__all__ = ["YouTubeMusicUploader"]
+__all__ = ["AuthenticationError", "YouTubeMusicUploader"]
