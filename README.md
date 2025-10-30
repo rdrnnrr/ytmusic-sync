@@ -9,6 +9,7 @@ A desktop utility for scanning a local music library and uploading new tracks to
 - 🚀 Integrates with [`ytmusicapi`](https://ytmusicapi.readthedocs.io/en/latest/) to perform uploads
 - 🖥️ Provides both a command line interface and an enhanced Tkinter desktop app that works great on Windows
 - 📊 Desktop app includes folder selection, dry-run toggle, upload progress bar, cancellation, and live activity log
+- 🧾 Manage the tracker database from either interface: choose a custom path, export backups, or reset safely with automatic backups
 - 🧪 Includes unit tests for core scanning and tracking functionality
 
 ## Project structure
@@ -62,10 +63,12 @@ The uploader uses [`ytmusicapi`](https://ytmusicapi.readthedocs.io) which requir
 ```bash
 ytmsync /path/to/your/music \
   --headers ~/.config/ytmusicapi/headers_auth.json \
-  --tracker ~/.ytmusic-sync/uploads.json
+  --tracker ~/.ytmusic-sync/uploads.json \
+  --export-tracker ~/.ytmusic-sync/uploads-backup.json \
+  --reset-tracker
 ```
 
-Add `--dry-run` to simulate uploads without contacting YouTube Music.
+Add `--dry-run` to simulate uploads without contacting YouTube Music. Use `--export-tracker` to write a backup and `--reset-tracker` to clear the tracker before the next run; omit them if you just want to upload.
 
 ### 5. Launch the desktop app
 
@@ -77,6 +80,7 @@ The GUI now provides:
 
 - **Select Folder** – choose the root directory to scan.
 - **Load Headers** – pick a `headers_auth.json` file exported from YouTube Music for more reliable uploads.
+- **Tracker Tools** – point at a custom tracker JSON, export a snapshot, or reset the database with an automatic backup and live pending/failed counts.
 - **Dry Run** – toggle between simulated and real uploads.
 - **Upload Pending** – start uploading files that are not recorded in the tracker database.
 - **Cancel Upload** – stop the current batch safely.

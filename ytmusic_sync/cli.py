@@ -11,6 +11,9 @@ from .tracker import UploadTracker
 from .uploader import YouTubeMusicUploader
 
 
+logger = logging.getLogger(__name__)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Sync local music to YouTube Music")
     parser.add_argument("music_dir", type=Path, help="Path to the music directory to scan")
@@ -32,6 +35,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not perform uploads, only log actions.",
     )
     parser.add_argument(
+        "--export-tracker",
+        type=Path,
+        help="Write a copy of the tracker JSON to the provided path before uploading.",
+    )
+    parser.add_argument(
+        "--reset-tracker",
+        action="store_true",
+        help="Clear the tracker (with an automatic backup) before uploading.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -45,6 +58,18 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(level=getattr(logging, args.log_level))
     tracker = UploadTracker(args.tracker)
+
+    if args.export_tracker:
+        exported_path = tracker.export_to(args.export_tracker)
+        logger.info("Tracker exported to %s", exported_path)
+
+    if args.reset_tracker:
+        backup_path = tracker.reset()
+        if backup_path:
+            logger.info("Tracker reset; backup saved to %s", backup_path)
+        else:
+            logger.info("Tracker reset; no previous state found")
+
     uploader = YouTubeMusicUploader(tracker, headers_path=args.headers, dry_run=args.dry_run)
 
     media_files = scan_music_directory(args.music_dir)

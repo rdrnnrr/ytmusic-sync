@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -56,6 +58,71 @@ class UploadTracker:
     def save(self) -> None:
         logger.debug("Saving tracker state to %s", self.tracker_file)
         self._write()
+
+    def export_state(self) -> Dict[str, dict]:
+        """Return a deep copy of the current tracker state."""
+
+        return json.loads(json.dumps(self._state))
+
+    def export_to(self, destination: Path | str) -> Path:
+        """Write a copy of the tracker state to *destination*.
+
+        Parameters
+        ----------
+        destination:
+            File path that will receive the exported JSON snapshot.
+
+        Returns
+        -------
+        Path
+            Resolved path to the exported file.
+        """
+
+        destination_path = Path(destination).expanduser().resolve()
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        with destination_path.open("w", encoding="utf-8") as fp:
+            json.dump(self.export_state(), fp, indent=2, sort_keys=True)
+        logger.info("Exported tracker state to %s", destination_path)
+        return destination_path
+
+    def reset(self, *, backup: bool = True) -> Optional[Path]:
+        """Clear the tracker, optionally creating a backup first.
+
+        Parameters
+        ----------
+        backup:
+            If ``True``, the current tracker file is copied to a timestamped
+            backup before the in-memory state is cleared.
+
+        Returns
+        -------
+        Optional[Path]
+            Path to the backup file if one was created, otherwise ``None``.
+        """
+
+        backup_path: Optional[Path] = None
+        if backup and self.tracker_file.exists():
+            backup_path = self._generate_backup_path()
+            shutil.copy2(self.tracker_file, backup_path)
+            logger.info("Backup of tracker saved to %s", backup_path)
+
+        self._state.clear()
+        self._write()
+        logger.info("Tracker state cleared at %s", self.tracker_file)
+        return backup_path
+
+    def _generate_backup_path(self) -> Path:
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        suffix = "".join(self.tracker_file.suffixes)
+        stem = self.tracker_file.stem
+        candidate = self.tracker_file.with_name(f"{stem}.{timestamp}{suffix}.bak")
+        counter = 1
+        while candidate.exists():
+            candidate = self.tracker_file.with_name(
+                f"{stem}.{timestamp}-{counter}{suffix}.bak"
+            )
+            counter += 1
+        return candidate
 
     def mark_uploaded(self, media_path: Path | str, video_id: str) -> None:
         """Record that *media_path* was uploaded to YouTube Music."""

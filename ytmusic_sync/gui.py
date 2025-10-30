@@ -44,7 +44,12 @@ class UploadApp:
         self.media_files: list[MediaFile] = []
         self._tree_items: dict[str, str] = {}
 
-        self.tracker = UploadTracker(Path.home() / ".ytmusic-sync" / "uploads.json")
+        tracker_path = Path.home() / ".ytmusic-sync" / "uploads.json"
+        self.tracker = UploadTracker(tracker_path)
+        self.tracker_path_var = StringVar(value=f"Tracker: {self.tracker.tracker_file}")
+        self.summary_var = StringVar(value="Pending: 0 • Failed: 0")
+        self.failed_paths: set[str] = set()
+
         # Dry-run default keeps the Windows binary safe until headers are configured.
         self.uploader = YouTubeMusicUploader(self.tracker, dry_run=True)
 
@@ -66,7 +71,7 @@ class UploadApp:
             style.theme_use("clam")
 
         self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(4, weight=1)
+        self.root.rowconfigure(5, weight=1)
 
         control_frame = ttk.Frame(self.root, padding=10)
         control_frame.grid(row=0, column=0, sticky="ew")
@@ -93,21 +98,41 @@ class UploadApp:
         folder_frame.columnconfigure(0, weight=1)
         ttk.Label(folder_frame, textvariable=self.folder_var).grid(row=0, column=0, sticky="w")
 
+        tracker_frame = ttk.Frame(self.root, padding=(10, 0, 10, 10))
+        tracker_frame.grid(row=2, column=0, sticky="ew")
+        tracker_frame.columnconfigure(1, weight=1)
+        tracker_frame.columnconfigure(2, weight=1)
+        ttk.Button(tracker_frame, text="Select Tracker", command=self.choose_tracker).grid(
+            row=0, column=0, padx=(0, 6)
+        )
+        ttk.Label(tracker_frame, textvariable=self.tracker_path_var).grid(
+            row=0, column=1, columnspan=2, sticky="w"
+        )
+        ttk.Button(tracker_frame, text="Export Tracker", command=self.export_tracker).grid(
+            row=1, column=0, pady=(4, 0)
+        )
+        ttk.Button(tracker_frame, text="Reset Tracker", command=self.reset_tracker).grid(
+            row=1, column=1, pady=(4, 0), sticky="w"
+        )
+        ttk.Label(tracker_frame, textvariable=self.summary_var).grid(
+            row=1, column=2, sticky="e", pady=(4, 0)
+        )
+
         auth_frame = ttk.Frame(self.root, padding=(10, 0, 10, 5))
-        auth_frame.grid(row=2, column=0, sticky="ew")
+        auth_frame.grid(row=3, column=0, sticky="ew")
         auth_frame.columnconfigure(1, weight=1)
         ttk.Button(auth_frame, text="Load Headers", command=self.choose_headers).grid(row=0, column=0, padx=(0, 6))
         ttk.Label(auth_frame, textvariable=self.headers_var).grid(row=0, column=1, sticky="w")
 
         status_frame = ttk.Frame(self.root, padding=(10, 0, 10, 10))
-        status_frame.grid(row=3, column=0, sticky="ew")
+        status_frame.grid(row=4, column=0, sticky="ew")
         status_frame.columnconfigure(0, weight=1)
 
         ttk.Label(status_frame, textvariable=self.status_var).grid(row=0, column=0, sticky="w")
         ttk.Label(status_frame, textvariable=self.progress_var).grid(row=0, column=1, sticky="e")
 
         list_frame = ttk.Frame(self.root, padding=10)
-        list_frame.grid(row=4, column=0, sticky=NSEW)
+        list_frame.grid(row=5, column=0, sticky=NSEW)
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
 
@@ -128,7 +153,7 @@ class UploadApp:
         tree_scroll.grid(row=0, column=1, sticky="ns")
 
         log_frame = ttk.LabelFrame(self.root, text="Activity", padding=10)
-        log_frame.grid(row=5, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        log_frame.grid(row=6, column=0, sticky="nsew", padx=10, pady=(0, 10))
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
 
@@ -140,7 +165,7 @@ class UploadApp:
         log_scroll.grid(row=0, column=1, sticky="ns")
 
         progress_frame = ttk.Frame(self.root, padding=(10, 0, 10, 10))
-        progress_frame.grid(row=6, column=0, sticky="ew")
+        progress_frame.grid(row=7, column=0, sticky="ew")
         progress_frame.columnconfigure(0, weight=1)
 
         self.progressbar = ttk.Progressbar(progress_frame, mode="determinate", maximum=100)
@@ -298,6 +323,7 @@ class UploadApp:
             self._append_log("Upload completed")
             self.progressbar.stop()
             self._set_buttons_state(idle=True)
+            self._update_summary()
 
         elif event_type == "upload_cancelled":
             _, uploaded_count, total = event
@@ -306,6 +332,7 @@ class UploadApp:
             self.progress_var.set(f"{uploaded_count} / {total}")
             self.status_var.set("Upload cancelling...")
             self._append_log("Upload cancellation requested")
+            self._update_summary()
 
         elif event_type == "upload_stopped":
             self.status_var.set("Upload cancelled")
@@ -313,6 +340,7 @@ class UploadApp:
             self.progressbar.stop()
             self.progress_var.set("Cancelled")
             self._set_buttons_state(idle=True)
+            self._update_summary()
 
     # ------------------------------------------------------------------
     # UI helper methods
@@ -321,6 +349,7 @@ class UploadApp:
         for item in self.tree.get_children():
             self.tree.delete(item)
         self._tree_items.clear()
+        self.failed_paths.clear()
 
         for media in self.media_files:
             status = "Uploaded" if self.tracker.is_uploaded(media.path) else "Pending"
@@ -328,12 +357,22 @@ class UploadApp:
             values = (media.path.name, media.mime_type, size_mb, status)
             item_id = self.tree.insert("", END, values=values)
             self._tree_items[str(Path(media.path).resolve())] = item_id
+        self._update_summary()
 
     def _update_tree_status(self, media_path: Path | str, status: str) -> None:
         resolved = str(Path(media_path).resolve())
         item_id = self._tree_items.get(resolved)
         if item_id:
             self.tree.set(item_id, "status", status)
+        if status == "Failed":
+            self.failed_paths.add(resolved)
+        else:
+            self.failed_paths.discard(resolved)
+        self._update_summary()
+
+    def _update_summary(self) -> None:
+        pending = sum(1 for media in self.media_files if not self.tracker.is_uploaded(media.path))
+        self.summary_var.set(f"Pending: {pending} • Failed: {len(self.failed_paths)}")
 
     def _append_log(self, message: str) -> None:
         self.log_text.configure(state=NORMAL)
@@ -384,6 +423,81 @@ class UploadApp:
     # ------------------------------------------------------------------
     # Public helpers for embedding / testing
     # ------------------------------------------------------------------
+    def set_tracker_path(self, tracker_path: Path | str) -> None:
+        """Switch to a different tracker file and refresh the UI."""
+
+        tracker_path = Path(tracker_path).expanduser()
+        try:
+            tracker = UploadTracker(tracker_path)
+        except Exception as exc:  # noqa: BLE001 - unexpected errors should surface
+            logger.exception("Failed to load tracker from %s", tracker_path)
+            messagebox.showerror("Tracker error", f"Failed to load tracker: {exc}")
+            return
+
+        self.tracker = tracker
+        self.uploader.tracker = tracker
+        self.tracker_path_var.set(f"Tracker: {tracker.tracker_file}")
+        self._append_log(f"Tracker file set to: {tracker.tracker_file}")
+        if self.media_files:
+            self._populate_tree()
+        else:
+            self._update_summary()
+
+    def choose_tracker(self) -> None:
+        file_path = filedialog.asksaveasfilename(
+            title="Select tracker JSON",
+            defaultextension=".json",
+            initialfile=Path(self.tracker.tracker_file).name,
+            filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
+        )
+        if file_path:
+            self.set_tracker_path(file_path)
+
+    def export_tracker(self) -> None:
+        export_path = filedialog.asksaveasfilename(
+            title="Export tracker state",
+            defaultextension=".json",
+            initialfile=f"{Path(self.tracker.tracker_file).stem}-export.json",
+            filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
+        )
+        if not export_path:
+            return
+        try:
+            destination = self.tracker.export_to(export_path)
+        except Exception as exc:  # noqa: BLE001 - report unexpected export failures
+            logger.exception("Failed to export tracker to %s", export_path)
+            messagebox.showerror("Export failed", f"Could not export tracker: {exc}")
+            return
+
+        messagebox.showinfo("Export complete", f"Tracker exported to {destination}")
+        self._append_log(f"Tracker exported to {destination}")
+
+    def reset_tracker(self) -> None:
+        if not messagebox.askyesno(
+            "Reset tracker",
+            "This will clear the tracker so all files appear pending. Continue?",
+        ):
+            return
+
+        try:
+            backup_path = self.tracker.reset()
+        except Exception as exc:  # noqa: BLE001 - show unexpected reset failures
+            logger.exception("Failed to reset tracker at %s", self.tracker.tracker_file)
+            messagebox.showerror("Reset failed", f"Could not reset tracker: {exc}")
+            return
+
+        if backup_path:
+            message = f"Tracker reset. Backup saved to {backup_path}"
+        else:
+            message = "Tracker reset. No previous data to back up."
+        messagebox.showinfo("Tracker reset", message)
+        self._append_log(message)
+
+        if self.media_files:
+            self._populate_tree()
+        else:
+            self._update_summary()
+
     def set_headers_path(self, headers_path: Path | str | None) -> None:
         """Configure the uploader headers dynamically from the GUI."""
 
