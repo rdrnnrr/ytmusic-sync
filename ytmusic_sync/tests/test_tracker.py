@@ -9,6 +9,7 @@ def test_tracker_marks_and_checks(tmp_path: Path) -> None:
     tracker = UploadTracker(tracker_file)
 
     media = MediaFile(path=tmp_path / "song.mp3", size_bytes=123, mime_type="audio/mpeg")
+    assert isinstance(tmp_path, Path)
     assert not tracker.is_uploaded(media.path)
 
     tracker.mark_uploaded(media.path, "video123")
