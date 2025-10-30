@@ -20,9 +20,10 @@ from tkinter import (
 )
 from tkinter import ttk
 
+from .config import CONFIG_FILE, AppConfig, load_config, save_config
 from .scanner import MediaFile, scan_music_directory
 from .tracker import UploadTracker
-from .uploader import YouTubeMusicUploader
+from .uploader import AuthenticationError, YouTubeMusicUploader
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ class UploadApp:
         self.tracker = UploadTracker(Path.home() / ".ytmusic-sync" / "uploads.json")
         # Dry-run default keeps the Windows binary safe until headers are configured.
         self.uploader = YouTubeMusicUploader(self.tracker, dry_run=True)
+        self.config_path = CONFIG_FILE
+        self.app_config: AppConfig = load_config(self.config_path)
 
         self._progress_queue: Queue[tuple] = Queue()
         self._upload_thread: threading.Thread | None = None
@@ -54,6 +57,9 @@ class UploadApp:
         self._stop_event = threading.Event()
 
         self._build_ui()
+        if self.app_config.headers_path:
+            self.set_headers_path(self.app_config.headers_path, persist=False)
+
         self.root.after(100, self._poll_queue)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -211,6 +217,10 @@ class UploadApp:
 
             try:
                 video_id = self.uploader.upload_file(media.path)
+            except AuthenticationError as exc:
+                logger.error("Authentication failed during upload: %s", exc)
+                self._progress_queue.put(("auth_error", str(exc)))
+                break
             except Exception as exc:  # noqa: BLE001 - log unexpected upload failures
                 logger.exception("Failed to upload %s", media.path)
                 self._progress_queue.put(("upload_error", media.path, str(exc), index, total))
@@ -289,6 +299,16 @@ class UploadApp:
             self._update_tree_status(media_path, "Failed")
             self.status_var.set(f"Failed: {Path(media_path).name}")
             self._append_log(f"Failed to upload {media_path}: {message}")
+
+        elif event_type == "auth_error":
+            _, message = event
+            self.progressbar.stop()
+            self.progressbar.configure(value=0)
+            self.progress_var.set("Error")
+            self.status_var.set("Authentication failed")
+            self._append_log(f"Authentication error: {message}")
+            messagebox.showerror("Authentication failed", message)
+            self._set_buttons_state(idle=True)
 
         elif event_type == "upload_complete":
             _, total = event
@@ -384,17 +404,44 @@ class UploadApp:
     # ------------------------------------------------------------------
     # Public helpers for embedding / testing
     # ------------------------------------------------------------------
-    def set_headers_path(self, headers_path: Path | str | None) -> None:
+    def set_headers_path(self, headers_path: Path | str | None, *, persist: bool = True) -> None:
         """Configure the uploader headers dynamically from the GUI."""
 
-        self.uploader.headers_path = Path(headers_path).expanduser() if headers_path else None
-        self.uploader._client = None  # reset client to pick up the new headers
-        if headers_path:
-            self.headers_var.set(f"Authentication: {Path(headers_path).expanduser()}")
-            self._append_log(f"Headers file selected: {headers_path}")
+        expanded = Path(headers_path).expanduser() if headers_path else None
+
+        previous_headers = self.uploader.headers_path
+        previous_client = self.uploader._client
+
+        if expanded:
+            try:
+                self.uploader.headers_path = expanded
+                self.uploader._client = None  # reset client to pick up the new headers
+                _ = self.uploader.client  # trigger authentication to validate headers immediately
+            except AuthenticationError as exc:
+                self.uploader.headers_path = previous_headers
+                self.uploader._client = previous_client
+                self.headers_var.set("Authentication: default (headers recommended)")
+                messagebox.showerror("Authentication failed", str(exc))
+                self._append_log(f"Authentication error: {exc}")
+                self.app_config.headers_path = None
+                if persist:
+                    save_config(self.app_config, self.config_path)
+                return
+        else:
+            self.uploader.headers_path = None
+            self.uploader._client = None
+
+        if expanded:
+            self.headers_var.set(f"Authentication: {expanded}")
+            self._append_log(f"Headers file selected: {expanded}")
+            self.app_config.headers_path = str(expanded)
         else:
             self.headers_var.set("Authentication: default (headers recommended)")
             self._append_log("Headers cleared – using default authentication")
+            self.app_config.headers_path = None
+
+        if persist:
+            save_config(self.app_config, self.config_path)
 
     def choose_headers(self) -> None:
         file_path = filedialog.askopenfilename(
