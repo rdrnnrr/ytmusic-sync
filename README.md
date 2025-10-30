@@ -45,9 +45,12 @@ source .venv/bin/activate  # On Windows use `.venv\\Scripts\\activate`
 
 ```bash
 pip install -r requirements.txt
+
+# Optional: install development tools like pytest and PyInstaller
+pip install -e .[dev]
 ```
 
-The GUI relies on Tkinter which is bundled with most Python distributions. On Debian/Ubuntu systems you may need to install `python3-tk` via your package manager.
+The GUI relies on Tkinter which is bundled with most Python distributions. On Debian/Ubuntu systems you may need to install `python3-tk` via your package manager. The `dev` extras group pulls in tooling required for running the test suite and producing PyInstaller builds.
 
 ### 3. Configure YouTube Music authentication
 
@@ -101,11 +104,11 @@ The desktop app remembers the headers file you select and will warn immediately 
 On Windows you can bundle the GUI into a single `.exe` using [PyInstaller](https://pyinstaller.org/):
 
 ```powershell
-py -m pip install pyinstaller
-py -m PyInstaller --name ytmusic-sync --windowed --noconfirm ytmusic_sync/gui.py
+py -m pip install .[dev]
+py scripts\build_windows_exe.py
 ```
 
-The resulting executable will be available under `dist\ytmusic-sync\ytmusic-sync.exe`. Distribute the `headers_auth.json` and tracker paths alongside the executable or allow users to select them at runtime.
+The helper script wraps PyInstaller so every Windows release lands in a versioned folder such as `dist\windows\ytmusic-sync-v0.1.0`. It also ensures the MIT `LICENSE` file referenced below is bundled alongside the executable (via `--add-data LICENSE;.`), so redistributors can ship the binary with the required notice. The generated executable lives at `dist\windows\ytmusic-sync-v0.1.0\ytmusic-sync\ytmusic-sync.exe`. Distribute the `headers_auth.json` and tracker paths alongside the executable or allow users to select them at runtime.
 
 ## Development workflow
 

@@ -7,16 +7,43 @@ name = "ytmusic-sync"
 version = "0.1.0"
 description = "Sync local music directories to YouTube Music"
 readme = "README.md"
-authors = [{ name = "Your Name", email = "you@example.com" }]
-license = { text = "MIT" }
+authors = [
+    { name = "YT Music Sync Contributors" },
+]
+maintainers = [
+    { name = "YT Music Sync Contributors", email = "maintainers@ytmusic-sync.dev" },
+]
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
+keywords = ["youtube", "music", "sync", "uploader", "ytmusicapi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Multimedia :: Sound/Audio :: Capture/Recording",
+    "Topic :: Utilities",
+]
 dependencies = [
     "ytmusicapi>=0.25.0",
     "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
-development = ["pytest>=7.4.0"]
+dev = [
+    "pytest>=7.4.0",
+    "pyinstaller>=6.4.0",
+]
 
 [project.scripts]
 ytmsync = "ytmusic_sync.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ytmusic-sync/ytmusic-sync"
+Repository = "https://github.com/ytmusic-sync/ytmusic-sync"
+Issues = "https://github.com/ytmusic-sync/ytmusic-sync/issues"
+Documentation = "https://github.com/ytmusic-sync/ytmusic-sync#readme"
