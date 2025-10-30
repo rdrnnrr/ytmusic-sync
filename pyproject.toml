@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ytmusic-sync"
+version = "0.1.0"
+description = "Sync local music directories to YouTube Music"
+readme = "README.md"
+authors = [{ name = "Your Name", email = "you@example.com" }]
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "ytmusicapi>=0.25.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+development = ["pytest>=7.4.0"]
+
+[project.scripts]
+ytmsync = "ytmusic_sync.cli:main"
